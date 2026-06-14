@@ -120,8 +120,6 @@ Token Bucket의 충전은 경과 시간에 **비례**한다. `refillRate`가 초
 
 소비 시점에는 `tokens >= 1` 조건으로 **정수 1개 단위**만 차감하므로, API 응답 의미(허용/거부)는 변하지 않는다.
 
-> **면접 포인트**: "왜 int가 아닌 double인가?" → **시간 비례 충전의 정밀도**를 위해. int는 sub-second refill을 표현하지 못한다.
-
 ### 4.3 `System.nanoTime()`을 사용한 이유
 
 `lastRefillTime` 기록 및 경과 시간 계산에 **`System.currentTimeMillis()`가 아닌 `System.nanoTime()`** 을 사용한다.
@@ -142,8 +140,6 @@ nanoTime():
 ```
 
 Rate Limiter가 필요한 것은 "지금 몇 시인가"가 아니라 **"마지막 충전 이후 얼마나 지났는가"** 이다. `nanoTime()`은 이 목적에 맞는 Java 표준 API이다. 나노초 단위 해상도도 짧은 요청 간격의 경과 시간을 정밀하게 계산하는 데 유리하다.
-
-> **면접 포인트**: "왜 currentTimeMillis가 아닌 nanoTime인가?" → **경과 시간 측정 전용**이며, 시스템 시각 변경의 영향을 받지 않기 때문.
 
 ### 4.4 토큰 충전 알고리즘 (`refill`)
 

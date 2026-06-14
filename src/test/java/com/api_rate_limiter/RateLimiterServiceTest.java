@@ -1,5 +1,7 @@
 package com.api_rate_limiter;
 
+import com.api_rate_limiter.config.RateLimiterStrategy;
+import com.api_rate_limiter.factory.TokenBucketFactory;
 import com.api_rate_limiter.manager.TokenBucketManager;
 import com.api_rate_limiter.service.RateLimiterService;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,7 +16,8 @@ class RateLimiterServiceTest {
 
     @BeforeEach
     void setUp() {
-        rateLimiterService = new RateLimiterService(new TokenBucketManager());
+        TokenBucketFactory factory = new TokenBucketFactory(RateLimiterStrategy.NO_LOCK);
+        rateLimiterService = new RateLimiterService(new TokenBucketManager(factory));
     }
 
     private boolean request(String userId, int requestNumber) {

@@ -30,9 +30,41 @@ dependencies {
 }
 
 tasks.named('test') {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags 'v2-demo', 'benchmark'
+    }
     testLogging {
         events 'passed', 'failed', 'skipped'
         showStandardStreams = true
     }
+}
+
+tasks.register('testV2Demo', Test) {
+    description = 'Run V2-1 race condition demonstration test'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'v2-demo'
+    }
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        showStandardStreams = true
+    }
+    shouldRunAfter test
+}
+
+tasks.register('testBenchmark', Test) {
+    description = 'Run concurrency benchmark tests'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'benchmark'
+    }
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        showStandardStreams = true
+    }
+    shouldRunAfter test
 }
