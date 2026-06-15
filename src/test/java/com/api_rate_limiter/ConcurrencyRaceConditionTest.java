@@ -71,9 +71,30 @@ class ConcurrencyRaceConditionTest {
                         + "This test intentionally fails (RED) until synchronization is applied.");
     }
 
+    @Test
+    @Tag("v3-demo")
+    void v3_naiveAtomic_capacityOne_exceedsAllowedLimit() throws InterruptedException {
+        int maxAllowed = 0;
+
+        for (int attempt = 0; attempt < DEMO_ATTEMPTS; attempt++) {
+            TokenBucket bucket = new TokenBucketFactory(RateLimiterStrategy.NAIVE_ATOMIC).create(1, 0.0);
+            int allowedCount = runConcurrentConsume(bucket);
+            maxAllowed = Math.max(maxAllowed, allowedCount);
+        }
+
+        System.out.printf(
+                "[V3-1 DEMO] NAIVE_ATOMIC - max allowed across %d attempts: %d (expected 1, check-then-act race reproduced)%n",
+                DEMO_ATTEMPTS,
+                maxAllowed);
+
+        assertTrue(maxAllowed > 1,
+                "Naive AtomicLong should still allow more than 1 request when capacity=1 under concurrent access. "
+                        + "Atomic variable alone does not make the logic atomic.");
+    }
+
     @ParameterizedTest
-    @EnumSource(value = RateLimiterStrategy.class, names = {"SYNCHRONIZED", "REENTRANT_LOCK"})
-    void synchronizedStrategies_capacityOne_onlyOneAllowed(RateLimiterStrategy strategy)
+    @EnumSource(value = RateLimiterStrategy.class, names = {"SYNCHRONIZED", "REENTRANT_LOCK", "CAS"})
+    void correctStrategies_capacityOne_onlyOneAllowed(RateLimiterStrategy strategy)
             throws InterruptedException {
         TokenBucket bucket = new TokenBucketFactory(strategy).create(1, 0.0);
 

@@ -1,6 +1,8 @@
 package com.api_rate_limiter.config;
 
 import com.api_rate_limiter.domain.AbstractTokenBucket;
+import com.api_rate_limiter.domain.CasTokenBucket;
+import com.api_rate_limiter.domain.NaiveAtomicTokenBucket;
 import com.api_rate_limiter.domain.ReentrantLockTokenBucket;
 import com.api_rate_limiter.domain.SynchronizedTokenBucket;
 import com.api_rate_limiter.domain.TokenBucket;
@@ -24,6 +26,18 @@ public enum RateLimiterStrategy {
         @Override
         public TokenBucket create(int capacity, double refillRate) {
             return new ReentrantLockTokenBucket(capacity, refillRate);
+        }
+    },
+    NAIVE_ATOMIC {
+        @Override
+        public TokenBucket create(int capacity, double refillRate) {
+            return new NaiveAtomicTokenBucket(capacity, refillRate);
+        }
+    },
+    CAS {
+        @Override
+        public TokenBucket create(int capacity, double refillRate) {
+            return new CasTokenBucket(capacity, refillRate);
         }
     };
 

@@ -64,7 +64,7 @@ class ConcurrencyBenchmarkTest {
                 elapsedMs,
                 TOTAL_REQUESTS / (elapsedMs / 1000.0));
 
-        if (strategy == RateLimiterStrategy.NO_LOCK) {
+        if (strategy == RateLimiterStrategy.NO_LOCK || strategy == RateLimiterStrategy.NAIVE_ATOMIC) {
             System.out.printf("[%s] allowed=%d (data corruption expected under contention)%n",
                     strategy, allowedCount.get());
         } else {
