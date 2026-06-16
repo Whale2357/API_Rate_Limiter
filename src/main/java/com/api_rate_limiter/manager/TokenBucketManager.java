@@ -17,6 +17,6 @@ public class TokenBucketManager {
     }
 
     public TokenBucket getOrCreate(String userId) {
-        return buckets.computeIfAbsent(userId, id -> tokenBucketFactory.create());
+        return buckets.computeIfAbsent(userId, tokenBucketFactory::create);
     }
 }

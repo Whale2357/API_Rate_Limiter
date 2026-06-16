@@ -16,7 +16,7 @@ class RateLimiterServiceTest {
 
     @BeforeEach
     void setUp() {
-        TokenBucketFactory factory = new TokenBucketFactory(RateLimiterStrategy.NO_LOCK);
+        TokenBucketFactory factory = TokenBucketFactory.forStrategy(RateLimiterStrategy.NO_LOCK);
         rateLimiterService = new RateLimiterService(new TokenBucketManager(factory));
     }
 

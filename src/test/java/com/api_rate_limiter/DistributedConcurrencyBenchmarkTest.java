@@ -3,6 +3,7 @@ package com.api_rate_limiter;
 import com.api_rate_limiter.config.RateLimiterStrategy;
 import com.api_rate_limiter.domain.TokenBucket;
 import com.api_rate_limiter.factory.TokenBucketFactory;
+import com.api_rate_limiter.support.RedisTestSupport;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -15,20 +16,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @Tag("benchmark")
-class ConcurrencyBenchmarkTest {
+class DistributedConcurrencyBenchmarkTest extends RedisTestSupport {
 
     private static final int THREAD_COUNT = 100;
-    private static final int REQUESTS_PER_THREAD = 1_000;
+    private static final int REQUESTS_PER_THREAD = 100;
     private static final int TOTAL_REQUESTS = THREAD_COUNT * REQUESTS_PER_THREAD;
 
     @ParameterizedTest
-    @EnumSource(value = RateLimiterStrategy.class, names = {
-            "NO_LOCK", "SYNCHRONIZED", "REENTRANT_LOCK", "NAIVE_ATOMIC", "CAS"
-    })
-    void benchmark_concurrentRequests_measureThroughput(RateLimiterStrategy strategy)
-            throws InterruptedException {
-        TokenBucket bucket = TokenBucketFactory.forStrategy(strategy)
-                .create(TOTAL_REQUESTS, 0.0);
+    @EnumSource(value = RateLimiterStrategy.class, names = {"NAIVE_REDIS", "LUA_REDIS"})
+    void benchmark_redisStrategies_measureThroughput(RateLimiterStrategy strategy) throws InterruptedException {
+        TokenBucketFactory factory = TokenBucketFactory.forStrategy(strategy, redisTemplate);
+        TokenBucket bucket = factory.create("benchmark-user", TOTAL_REQUESTS, 0.0);
         ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
         CountDownLatch startLatch = new CountDownLatch(1);
         CountDownLatch doneLatch = new CountDownLatch(THREAD_COUNT);
@@ -66,7 +64,7 @@ class ConcurrencyBenchmarkTest {
                 elapsedMs,
                 TOTAL_REQUESTS / (elapsedMs / 1000.0));
 
-        if (strategy == RateLimiterStrategy.NO_LOCK || strategy == RateLimiterStrategy.NAIVE_ATOMIC) {
+        if (strategy == RateLimiterStrategy.NAIVE_REDIS) {
             System.out.printf("[%s] allowed=%d (data corruption expected under contention)%n",
                     strategy, allowedCount.get());
         } else {
