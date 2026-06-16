@@ -20,10 +20,12 @@ repositories {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     compileOnly 'org.projectlombok:lombok'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     annotationProcessor 'org.projectlombok:lombok'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testImplementation 'org.testcontainers:junit-jupiter:1.20.6'
     testCompileOnly 'org.projectlombok:lombok'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testAnnotationProcessor 'org.projectlombok:lombok'
@@ -31,7 +33,7 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform {
-        excludeTags 'v2-demo', 'v3-demo', 'benchmark'
+        excludeTags 'v2-demo', 'v3-demo', 'v4-demo', 'benchmark'
     }
     testLogging {
         events 'passed', 'failed', 'skipped'
@@ -61,6 +63,21 @@ tasks.register('testV3Demo', Test) {
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform {
         includeTags 'v3-demo'
+    }
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        showStandardStreams = true
+    }
+    shouldRunAfter test
+}
+
+tasks.register('testV4Demo', Test) {
+    description = 'Run V4-1 naive Redis race condition demonstration test'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'v4-demo'
     }
     testLogging {
         events 'passed', 'failed', 'skipped'

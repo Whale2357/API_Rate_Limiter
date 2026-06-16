@@ -106,7 +106,7 @@ class HotUserBottleneckTest {
     @ParameterizedTest
     @EnumSource(value = RateLimiterStrategy.class, names = {"SYNCHRONIZED", "REENTRANT_LOCK", "CAS"})
     void hotUser_vs_distributed_compareBottleneck(RateLimiterStrategy strategy) throws InterruptedException {
-        TokenBucketFactory factory = new TokenBucketFactory(strategy);
+        TokenBucketFactory factory = TokenBucketFactory.forStrategy(strategy);
 
         BenchmarkResult hotUser = runHotUser(factory);
         BenchmarkResult distributed = runDistributed(factory);

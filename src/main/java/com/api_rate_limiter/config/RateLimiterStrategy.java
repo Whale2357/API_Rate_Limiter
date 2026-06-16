@@ -39,7 +39,25 @@ public enum RateLimiterStrategy {
         public TokenBucket create(int capacity, double refillRate) {
             return new CasTokenBucket(capacity, refillRate);
         }
+    },
+    NAIVE_REDIS {
+        @Override
+        public TokenBucket create(int capacity, double refillRate) {
+            throw new UnsupportedOperationException(
+                    "NAIVE_REDIS requires userId — use TokenBucketFactory.create(userId, capacity, refillRate)");
+        }
+    },
+    LUA_REDIS {
+        @Override
+        public TokenBucket create(int capacity, double refillRate) {
+            throw new UnsupportedOperationException(
+                    "LUA_REDIS requires userId — use TokenBucketFactory.create(userId, capacity, refillRate)");
+        }
     };
+
+    public boolean isRedisBased() {
+        return this == NAIVE_REDIS || this == LUA_REDIS;
+    }
 
     public TokenBucket create() {
         return create(AbstractTokenBucket.DEFAULT_CAPACITY, AbstractTokenBucket.DEFAULT_REFILL_RATE);
