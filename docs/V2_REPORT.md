@@ -321,7 +321,7 @@ V2-1과 동일한 조건(capacity=1, 500 스레드)에서 `SYNCHRONIZED`, `REENT
 
 ### 7.6 synchronized vs ReentrantLock 결과 해석의 주의점
 
-본 실험의 수치(synchronized: 12.76 ms, ReentrantLock: 19.98 ms)를 근거로 **"synchronized가 ReentrantLock보다 항상 우수하다"** 고 일반화하는 것은 심각한 논리적 오류를 범할 수 있다.
+본 실험의 수치(synchronized: 12.76 ms, ReentrantLock: 19.98 ms)를 근거로 **"synchronized가 ReentrantLock보다 항상 우수하다"** 고 일반화하는 것은 논리적 오류를 범할 수 있다.
 
 #### 실험 조건의 제약성
 
