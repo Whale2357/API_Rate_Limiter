@@ -41,24 +41,24 @@
 ## Architecture (V5 Gateway)
 
 ```text
-                       [ Client Request ]
-                               │  POST /v1/chat
-                               ▼  (Header - Authorization: Bearer sk-userA)
-┌──────────────────────────────────────────────────────────────┐
-│  🔒 [ API Gateway Layer ] (시스템 전면 보호 및 트래픽 제어)      │
-│                                                              │
-│  1. ApiKeyFilter                                             │
-│     └─ 헤더 검증 및 API Key 추출 (실패 시 401 Unauthorized 즉시 차단) │
-│                                                              │
-│  2. RateLimitInterceptor                                     │
-│     └─ 컨트롤러 진입 전 전처리 스위치 역할 (tryAcquire 호출)     │
-│                                                              │
-│  3. Redis Centralized Server                                 │
-│     └─ 단일 진실 공급원(SSOT) 시계 및 Lua Script 직렬화 원자 연산   │
-└──────────────────────────────────────────────────────────────┘
-                               │
-                               ▼ [토큰 잔여 시 허용 (HTTP 200)]
-         [ Core Business Controller (Mock AI Service) ]
+                    [ Client Request ]
+                          │  POST /v1/chat
+                          ▼  (Authorization: Bearer sk-userA)
+╔════════════════════════════════════════════════════════════════════════╗
+║   🔒 API Gateway Layer  (시스템 전면 보호 및 트래픽 제어)              ║
+║                                                                        ║
+║   1. ApiKeyFilter                                                      ║
+║      └─ 헤더 검증 및 API Key 추출 (실패 시 401 Unauthorized 즉시 차단) ║
+║                                                                        ║
+║   2. RateLimitInterceptor                                              ║
+║      └─ 컨트롤러 진입 전 전처리 스위치 역할 (tryAcquire 호출)          ║
+║                                                                        ║
+║   3. Redis Centralized Server                                          ║
+║      └─ 단일 진실 공급원(SSOT) 시계 및 Lua Script 직렬화 원자 연산     ║
+╚════════════════════════════════════════════════════════════════════════╝
+                          │
+                          ▼  [토큰 잔여 시 허용 (HTTP 200)]
+          [ Core Business Controller (Mock AI Service) ]
 ```
 
 ---
