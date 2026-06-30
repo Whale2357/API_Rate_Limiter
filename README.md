@@ -1,0 +1,208 @@
+# API Rate Limiter
+
+> 단일 JVM 동시성부터 분산 정합성까지 — Token Bucket Rate Limiter를 **5단계(V1~V5)** 로 진화시키며 동시성·분산 문제를 직접 재현하고 해결한 학습/포트폴리오 프로젝트.
+
+![Java](https://img.shields.io/badge/Java-17-orange)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-6DB33F)
+![Redis](https://img.shields.io/badge/Redis-7-DC382D)
+![Lua](https://img.shields.io/badge/Lua-Script-000080)
+![Gradle](https://img.shields.io/badge/Build-Gradle-02303A)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)
+
+---
+
+## Why this project
+
+단순히 "동작하는 Rate Limiter"를 만드는 것이 아니라, **동시성 버그를 코드로 재현 → 측정 → 해결**하는 과정 자체를 기록하는 데 집중했다. 각 버전은 이전 버전의 **한계를 정량적으로 증명**하고, 다음 버전이 그 문제를 어떻게 푸는지를 보여준다.
+
+- **Check-Then-Act Race Condition** 을 테스트로 재현
+- 블로킹 락 vs **CAS Lock-Free** 성능 벤치마크
+- **Redis Lua 단일 스레드 직렬 실행** 으로 분산 원자성 확보
+- `redis.call('TIME')` 으로 멀티 인스턴스 **Clock Skew 차단**
+- Spring **Filter / Interceptor** 게이트웨이 계층 결합
+
+---
+
+## Evolution at a glance (V1 → V5)
+
+| 버전 | 핵심 주제 | 해결한 문제 | 남은 한계 | 보고서 |
+|------|-----------|-------------|-----------|--------|
+| **V1** | No Lock | 기본 Token Bucket 동작 | Race Condition으로 한도 초과 허용 | [V1](docs/V1_REPORT.md) |
+| **V2** | `synchronized` / `ReentrantLock` | 로컬 임계 영역 동시성 해결 | 락 블로킹 대기 비용 | [V2](docs/V2_REPORT.md) |
+| **V3** | CAS Lock-Free (`AtomicReference`) | 논블로킹 상태 전환 | 단일 JVM 한계 (Scale-out 불가) | [V3](docs/V3_REPORT.md) |
+| **V4** | Redis + Lua (분산) | 멀티 인스턴스 분산 정합성(SSOT) | 실제 요청 파이프라인 미통합 | [V4](docs/V4_REPORT.md) |
+| **V5** | API Gateway 통합 | Filter/Interceptor 결합, 등급 정책, 표준 헤더 | 대규모 부하 검증 미수행 | [V5](docs/V5_REPORT.md) |
+
+> 핵심 서사: **V1(버그 발견) → V2(락) → V3(Lock-Free) → V4(분산 원자성) → V5(프로덕션 결합)**.
+> 단일 JVM의 CAS가 하던 역할을, 분산 환경에서는 Redis의 단일 스레드 직렬 실행이 대신한다.
+
+---
+
+## Architecture (V5 Gateway)
+
+```text
+                       [ Client Request ]
+                               │  POST /v1/chat
+                               ▼  (Header - Authorization: Bearer sk-userA)
+┌──────────────────────────────────────────────────────────────┐
+│  🔒 [ API Gateway Layer ] (시스템 전면 보호 및 트래픽 제어)      │
+│                                                              │
+│  1. ApiKeyFilter                                             │
+│     └─ 헤더 검증 및 API Key 추출 (실패 시 401 Unauthorized 즉시 차단) │
+│                                                              │
+│  2. RateLimitInterceptor                                     │
+│     └─ 컨트롤러 진입 전 전처리 스위치 역할 (tryAcquire 호출)     │
+│                                                              │
+│  3. Redis Centralized Server                                 │
+│     └─ 단일 진실 공급원(SSOT) 시계 및 Lua Script 직렬화 원자 연산   │
+└──────────────────────────────────────────────────────────────┘
+                               │
+                               ▼ [토큰 잔여 시 허용 (HTTP 200)]
+         [ Core Business Controller (Mock AI Service) ]
+```
+
+---
+
+## Tech Stack
+
+- **Language / Runtime**: Java 17
+- **Framework**: Spring Boot 4.1.0 (Spring MVC, Servlet Filter, HandlerInterceptor)
+- **Store**: Redis 7 (Hash + Lua Script)
+- **Build**: Gradle
+- **Infra / Test**: Docker Compose, Testcontainers, JUnit 5
+
+---
+
+## Quick Start
+
+### 1. Redis 기동
+
+```powershell
+docker compose up -d
+```
+
+### 2. 애플리케이션 실행
+
+```powershell
+.\gradlew.bat bootRun
+```
+
+### 3. API 호출
+
+```powershell
+curl -X POST http://localhost:8080/v1/chat `
+  -H "Authorization: Bearer sk-userA" `
+  -H "Content-Type: application/json" `
+  -d '{\"message\":\"hi\"}' -i
+```
+
+- **허용 (200 OK)**: `{ "answer": "Mock AI Response" }` + `X-RateLimit-Remaining` 헤더
+- **한도 초과 (429)**: `{ "error": "Too Many Requests" }` + `Retry-After: 1`
+- **인증 실패 (401)**: `{ "error": "Unauthorized" }`
+
+### 멀티 인스턴스 (분산 정합성 확인)
+
+```powershell
+.\gradlew.bat bootRun --args="--server.port=8080"
+.\gradlew.bat bootRun --args="--server.port=8081"
+```
+
+두 인스턴스가 동일 Redis 버킷을 공유하므로 합산 한도가 정확히 지켜진다.
+
+---
+
+## 등급별 정책 (Tier)
+
+API Key 프리픽스로 등급을 판정한다 (`RateLimitTier.fromApiKey()`).
+
+| Tier | API Key 프리픽스 | Capacity | Refill Rate |
+|------|------------------|----------|-------------|
+| FREE | (기본) | 10 | 10 tokens/sec |
+| PRO | `sk-pro-` | 50 | 50 tokens/sec |
+| ENTERPRISE | `sk-enterprise-` | 200 | 200 tokens/sec |
+
+---
+
+## Tests & Benchmarks
+
+```powershell
+# 전체 단위/통합 테스트 (데모·벤치마크 태그는 제외)
+.\gradlew.bat test
+
+# 버전별 Race Condition 데모
+.\gradlew.bat testV2Demo   # V2-1 로컬 레이스 재현
+.\gradlew.bat testV3Demo   # V3-1 naive atomic 레이스 재현
+.\gradlew.bat testV4Demo   # V4-1 naive Redis 분산 레이스 재현
+
+# 동시성 성능 벤치마크 (락 vs CAS 등)
+.\gradlew.bat testBenchmark
+```
+
+> Redis 기반 테스트는 로컬 `localhost:6379` 또는 Testcontainers가 없으면 `Assumptions.abort`로 **SKIPPED** 처리되어 빌드는 성공한다. 완전한 검증을 위해 `docker compose up -d` 후 실행하는 것을 권장한다.
+
+---
+
+## Project Structure
+
+```text
+src/main/java/com/api_rate_limiter/
+├── domain/          # 전략별 TokenBucket 구현 (V1~V4)
+│   ├── V1TokenBucket.java               # NO_LOCK
+│   ├── SynchronizedTokenBucket.java     # SYNCHRONIZED
+│   ├── ReentrantLockTokenBucket.java    # REENTRANT_LOCK
+│   ├── NaiveAtomicTokenBucket.java      # NAIVE_ATOMIC
+│   ├── CasTokenBucket.java              # CAS (Lock-Free)
+│   ├── NaiveRedisTokenBucket.java       # NAIVE_REDIS (분산 레이스 재현)
+│   └── LuaScriptRedisTokenBucket.java   # LUA_REDIS (분산 원자성)
+├── config/          # RateLimiterStrategy, WebMvcConfig
+├── factory/         # TokenBucketFactory
+├── manager/         # TokenBucketManager (유저별 버킷 관리)
+├── filter/          # ApiKeyFilter (인증, 401)
+├── interceptor/     # RateLimitInterceptor (트래픽 제어, 429)
+├── ratelimiter/     # LuaRedisRateLimiter, RateLimitTier, RateLimitResult
+├── controller/      # ChatController (POST /v1/chat)
+└── service/         # AiService (Mock)
+src/main/resources/scripts/
+├── token-bucket.lua   # V4 분산 토큰 버킷
+└── rate-limiter.lua   # V5 게이트웨이 (allowed + remaining 반환)
+docs/                  # V1~V5 상세 보고서
+```
+
+---
+
+## 핵심 기술 포인트
+
+### 1. 분산 원자성 (Why Lua)
+토큰 버킷 처리는 본질적으로 **읽기 → 계산 → 쓰기** 3단계다. 이를 자바에서 개별 Redis 명령으로 나누면 명령 사이에 다른 요청이 끼어드는 Check-Then-Act Race Condition이 발생한다(V4-1에서 증명). Redis는 **Lua 스크립트 전체를 단일 스레드 이벤트 루프에서 직렬 실행**하므로, 3단계를 하나의 원자 단위로 묶어 분산 환경에서도 레이스를 원천 차단한다.
+
+### 2. Clock Skew 차단 (시간 동기화)
+멀티 서버가 동일 버킷을 공유할 때 `System.nanoTime()`(장비 부팅 기준 단조 시각)을 넘기면 서버 간 시각 불일치로 정합성이 깨진다. V5는 Lua 내부에서 `redis.call('TIME')`을 호출해 **모든 인스턴스가 동일한 Redis 시계**를 기준으로 refill을 계산한다.
+
+### 3. 책임 분리된 게이트웨이
+- `ApiKeyFilter` (Servlet Filter): 인증/Key 추출 → 실패 시 401
+- `RateLimitInterceptor` (HandlerInterceptor): `preHandle` 반환 boolean이 통과/차단 스위치 → 초과 시 429 Early Return
+- 표준 헤더(`X-RateLimit-Limit/Remaining`, `Retry-After`) 주입
+
+---
+
+## Roadmap (V6 예고)
+
+V6에서는 부하 생성 도구 **k6**로 게이트웨이 계층 추가에 따른 p95/p99 지연 시간 오버헤드를 정량화할 예정이다.
+
+| 시나리오 | 부하 형태 | 테스트 목적 |
+|----------|-----------|-------------|
+| Distributed User | 1,000명 유저 개별 키 인입 | 대규모 분산 환경 TPS 측정 |
+| Hot User | 단일 API Key 10만 건 집중 | 단일 Redis Key 직렬화 병목 임계점 |
+| Mixed Tier | FREE/PRO/ENTERPRISE 혼합 | 등급별 동적 한도 정확성 검증 |
+
+---
+
+## Documentation
+
+각 단계의 문제 정의 · 실험 · 측정 결과 · 한계는 보고서에 상세히 정리되어 있다.
+
+- [V1 — No Lock & Race Condition](docs/V1_REPORT.md)
+- [V2 — Locking (synchronized / ReentrantLock)](docs/V2_REPORT.md)
+- [V3 — Lock-Free CAS](docs/V3_REPORT.md)
+- [V4 — Distributed Token Bucket (Redis + Lua)](docs/V4_REPORT.md)
+- [V5 — Enterprise API Gateway Integration](docs/V5_REPORT.md)
