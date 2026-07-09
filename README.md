@@ -6,6 +6,9 @@
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-6DB33F)
 ![Redis](https://img.shields.io/badge/Redis-7-DC382D)
 ![Lua](https://img.shields.io/badge/Lua-Script-000080)
+![k6](https://img.shields.io/badge/k6-Load%20Test-7D64FF)
+![Prometheus](https://img.shields.io/badge/Prometheus-Metrics-E6522C)
+![Grafana](https://img.shields.io/badge/Grafana-Dashboard-F46800)
 ![Gradle](https://img.shields.io/badge/Build-Gradle-02303A)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)
 
@@ -20,6 +23,7 @@
 - **Redis Lua 단일 스레드 직렬 실행** 으로 분산 원자성 확보
 - `redis.call('TIME')` 으로 멀티 인스턴스 **Clock Skew 차단**
 - Spring **Filter / Interceptor** 게이트웨이 계층 결합
+- **k6 + Prometheus + Grafana** 로 게이트웨이 오버헤드 및 429 보호 가동률 정량화
 
 ---
 
@@ -32,14 +36,14 @@
 | **V3** | CAS Lock-Free (`AtomicReference`) | 논블로킹 상태 전환 | 단일 JVM 한계 (Scale-out 불가) | [V3](docs/V3_REPORT.md) |
 | **V4** | Redis + Lua (분산) | 멀티 인스턴스 분산 정합성(SSOT) | 실제 요청 파이프라인 미통합 | [V4](docs/V4_REPORT.md) |
 | **V5** | API Gateway 통합 | Filter/Interceptor 결합, 등급 정책, 표준 헤더 | 대규모 부하 검증 미수행 | [V5](docs/V5_REPORT.md) |
-| **V6** | Performance Engineering | k6 + Actuator/Prometheus/Grafana 관측, 4대 부하 시나리오 | 결과 데이터 축적 단계 | [V6](docs/V6_REPORT.md) |
+| **V6** | Performance Engineering | k6 4대 시나리오, 관측 스택, 한계 TPS/Latency 실측 | 프로덕션 규모 확장 검증 | [V6](docs/V6_REPORT.md) |
 
-> 핵심 서사: **V1(버그 발견) → V2(락) → V3(Lock-Free) → V4(분산 원자성) → V5(프로덕션 결합)**.
+> 핵심 서사: **V1(버그 발견) → V2(락) → V3(Lock-Free) → V4(분산 원자성) → V5(프로덕션 결합) → V6(성능·한계 검증)**.
 > 단일 JVM의 CAS가 하던 역할을, 분산 환경에서는 Redis의 단일 스레드 직렬 실행이 대신한다.
 
 ---
 
-## Architecture (V5 Gateway)
+## Architecture (V5 Gateway + V6 Observability)
 
 ```text
                     [ Client Request ]
@@ -60,6 +64,11 @@
                           │
                           ▼  [토큰 잔여 시 허용 (HTTP 200)]
           [ Core Business Controller (Mock AI Service) ]
+
+  [ k6 Load Generator ] ──HTTP──> Gateway (:8080/:8081)
+       │                              │
+       │                              ├──> [ Prometheus ] ──> [ Grafana :3000 ]
+       │                              └──> [ Redis Exporter ]
 ```
 
 ---
@@ -67,8 +76,10 @@
 ## Tech Stack
 
 - **Language / Runtime**: Java 17
-- **Framework**: Spring Boot 4.1.0 (Spring MVC, Servlet Filter, HandlerInterceptor)
+- **Framework**: Spring Boot 4.1.0 (Spring MVC, Servlet Filter, HandlerInterceptor, Actuator)
 - **Store**: Redis 7 (Hash + Lua Script)
+- **Observability**: Prometheus, Grafana, Redis Exporter
+- **Load Test**: k6 (Docker `grafana/k6`)
 - **Build**: Gradle
 - **Infra / Test**: Docker Compose, Testcontainers, JUnit 5
 
@@ -76,11 +87,15 @@
 
 ## Quick Start
 
-### 1. Redis 기동
+### 1. 인프라 기동 (Redis + 관측 스택)
 
 ```powershell
 docker compose up -d
 ```
+
+- Redis: `localhost:6379`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000` (기본 `admin` / `admin`)
 
 ### 2. 애플리케이션 실행
 
@@ -143,30 +158,68 @@ API Key 프리픽스로 등급을 판정한다 (`RateLimitTier.fromApiKey()`).
 
 ---
 
+## V6 Performance Validation
+
+V6에서는 k6와 관측 스택을 결합해 4개 시나리오를 실행하고, 게이트웨이 계층의 성능 오버헤드와 429 보호 가동률을 정량화한다.
+
+### 시나리오
+
+| 시나리오 | 부하 형태 | 테스트 목적 |
+|----------|-----------|-------------|
+| Baseline | Rate Limiter OFF, 100 VUs | 순수 Mock 비즈니스 로직 기준선 |
+| Distributed User | ON, 100 VUs, 100 keys | 운영 유사 분산 패턴 TPS/Latency |
+| Hot User | ON, 100 VUs, 1 key 집중 | 단일 Key 직렬화 경합 및 429 응답성 |
+| Mixed Tier | ON, FREE 90% + PRO 10% | 등급별 정책 정합성 |
+
+### 실측 결과 요약 (100 VU, 60s)
+
+| Scenario | TPS | p95 | 200 | 429 |
+|----------|----:|----:|----:|----:|
+| Baseline | 3,350 | 27ms | 100% | 0% |
+| Distributed | 776 | 286ms | 100% | 0% |
+| Hot User | 651 | 272ms | 51% | 49% |
+| Mixed Tier | 606 | 279ms | 100% | 0% |
+
+> Baseline 대비 게이트웨이 ON 시 TPS **~77% 감소**, avg latency **~10배 증가**. Hot User에서 429 **49%**로 보호 계층이 정상 가동함을 확인했다.
+
+### 실행 방법 (Docker k6)
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+# Baseline (게이트웨이 OFF, :8082)
+.\gradlew.bat bootRun --args="--spring.profiles.active=v6-baseline --server.port=8082"
+$env:BASELINE_TARGET="http://host.docker.internal:8082"
+.\performance\k6\run-v6.ps1 -Scenario baseline -Vus 100 -Duration 60s -Engine docker
+
+# Scenario 2~4 (게이트웨이 ON, :8080/:8081)
+$env:TARGETS="http://host.docker.internal:8080,http://host.docker.internal:8081"
+.\performance\k6\run-v6.ps1 -Scenario distributed -Vus 100 -Duration 60s -Engine docker
+.\performance\k6\run-v6.ps1 -Scenario hotuser -Vus 100 -Duration 60s -Engine docker
+.\performance\k6\run-v6.ps1 -Scenario mixed -Vus 100 -Duration 60s -Engine docker
+```
+
+상세 해석 및 Grafana 패널 가이드는 [V6 보고서](docs/V6_REPORT.md)를 참고한다.
+
+---
+
 ## Project Structure
 
 ```text
 src/main/java/com/api_rate_limiter/
 ├── domain/          # 전략별 TokenBucket 구현 (V1~V4)
-│   ├── V1TokenBucket.java               # NO_LOCK
-│   ├── SynchronizedTokenBucket.java     # SYNCHRONIZED
-│   ├── ReentrantLockTokenBucket.java    # REENTRANT_LOCK
-│   ├── NaiveAtomicTokenBucket.java      # NAIVE_ATOMIC
-│   ├── CasTokenBucket.java              # CAS (Lock-Free)
-│   ├── NaiveRedisTokenBucket.java       # NAIVE_REDIS (분산 레이스 재현)
-│   └── LuaScriptRedisTokenBucket.java   # LUA_REDIS (분산 원자성)
-├── config/          # RateLimiterStrategy, WebMvcConfig
-├── factory/         # TokenBucketFactory
-├── manager/         # TokenBucketManager (유저별 버킷 관리)
+├── config/          # RateLimiterStrategy, WebMvcConfig (게이트웨이 ON/OFF)
 ├── filter/          # ApiKeyFilter (인증, 401)
 ├── interceptor/     # RateLimitInterceptor (트래픽 제어, 429)
 ├── ratelimiter/     # LuaRedisRateLimiter, RateLimitTier, RateLimitResult
 ├── controller/      # ChatController (POST /v1/chat)
 └── service/         # AiService (Mock)
-src/main/resources/scripts/
-├── token-bucket.lua   # V4 분산 토큰 버킷
-└── rate-limiter.lua   # V5 게이트웨이 (allowed + remaining 반환)
-docs/                  # V1~V5 상세 보고서
+src/main/resources/
+├── scripts/         # token-bucket.lua (V4), rate-limiter.lua (V5)
+└── application-v6-baseline.properties  # V6 Baseline 프로필 (게이트웨이 OFF)
+monitoring/          # Prometheus, Grafana 프로비저닝 (V6)
+performance/k6/      # k6 시나리오 및 run-v6.ps1 (V6)
+docs/                # V1~V6 상세 보고서
 ```
 
 ---
@@ -184,20 +237,10 @@ docs/                  # V1~V5 상세 보고서
 - `RateLimitInterceptor` (HandlerInterceptor): `preHandle` 반환 boolean이 통과/차단 스위치 → 초과 시 429 Early Return
 - 표준 헤더(`X-RateLimit-Limit/Remaining`, `Retry-After`) 주입
 
----
-
-## V6 Performance Validation
-
-V6에서는 k6와 관측 스택을 결합해 아래 4개 시나리오를 실행한다.
-
-| 시나리오 | 부하 형태 | 테스트 목적 |
-|----------|-----------|-------------|
-| Baseline | Rate Limiter OFF, 100 VUs | 순수 비즈니스 로직 기준선 측정 |
-| Distributed User | ON, 100 VUs, 100 keys | 운영 유사 분산 패턴의 TPS/Latency 측정 |
-| Hot User | ON, 100 VUs, 1 key 집중 | 단일 Key 경합 시 p99 및 429 응답성 검증 |
-| Mixed Tier | ON, FREE 90% + PRO 10% | 등급별 정책 정합성 검증 |
-
-실행 가이드는 `docs/V6_REPORT.md`를 참고한다.
+### 4. 성능 엔지니어링 (V6)
+- Baseline(게이트웨이 OFF)과 ON 시나리오를 분리 측정해 **오버헤드의 원인**을 분리한다.
+- Hot User 시나리오로 단일 Redis Key 직렬화 병목과 **429 Early Return** 응답성을 검증한다.
+- Actuator 메트릭 + Grafana 대시보드로 TPS, Latency, 200/429 비율, Redis CPU를 실시간 관측한다.
 
 ---
 
