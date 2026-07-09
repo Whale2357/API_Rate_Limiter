@@ -1,0 +1,205 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(http_server_requests_seconds_count{uri=\"/v1/chat\"}[1m]))",
+          "legendFormat": "spring_tps",
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(k6_http_reqs_total[1m]))",
+          "legendFormat": "k6_tps",
+          "refId": "B"
+        }
+      ],
+      "title": "TPS (/v1/chat)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{uri=\"/v1/chat\"}[1m])) by (le)) * 1000",
+          "legendFormat": "p95",
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{uri=\"/v1/chat\"}[1m])) by (le)) * 1000",
+          "legendFormat": "p99",
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(http_server_requests_seconds_sum{uri=\"/v1/chat\"}[1m])) / sum(rate(http_server_requests_seconds_count{uri=\"/v1/chat\"}[1m])) * 1000",
+          "legendFormat": "avg",
+          "refId": "C"
+        }
+      ],
+      "title": "Latency p95/p99 (/v1/chat)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(http_server_requests_seconds_count{uri=\"/v1/chat\",status=\"200\"}[1m])) / sum(rate(http_server_requests_seconds_count{uri=\"/v1/chat\"}[1m]))",
+          "legendFormat": "200_rate",
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(http_server_requests_seconds_count{uri=\"/v1/chat\",status=\"429\"}[1m])) / sum(rate(http_server_requests_seconds_count{uri=\"/v1/chat\"}[1m]))",
+          "legendFormat": "429_rate",
+          "refId": "B"
+        }
+      ],
+      "title": "Success / Reject Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "rate(redis_cpu_user_seconds_total[1m]) * 100",
+          "legendFormat": "redis_cpu_user",
+          "refId": "A"
+        }
+      ],
+      "title": "Redis CPU (Exporter)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "v6",
+    "performance"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timezone": "",
+  "title": "API Rate Limiter V6 - Performance",
+  "uid": "api-rate-limiter-v6",
+  "version": 1,
+  "weekStart": ""
+}

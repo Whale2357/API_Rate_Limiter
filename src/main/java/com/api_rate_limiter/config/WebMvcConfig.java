@@ -2,6 +2,7 @@ package com.api_rate_limiter.config;
 
 import com.api_rate_limiter.filter.ApiKeyFilter;
 import com.api_rate_limiter.interceptor.RateLimitInterceptor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,9 +20,13 @@ public class WebMvcConfig implements WebMvcConfigurer {
     private static final String PROTECTED_URL_PATTERN = "/v1/*";
 
     private final RateLimitInterceptor rateLimitInterceptor;
+    private final boolean gatewayEnabled;
 
-    public WebMvcConfig(RateLimitInterceptor rateLimitInterceptor) {
+    public WebMvcConfig(
+            RateLimitInterceptor rateLimitInterceptor,
+            @Value("${rate-limiter.gateway.enabled:true}") boolean gatewayEnabled) {
         this.rateLimitInterceptor = rateLimitInterceptor;
+        this.gatewayEnabled = gatewayEnabled;
     }
 
     @Bean
@@ -29,11 +34,14 @@ public class WebMvcConfig implements WebMvcConfigurer {
         FilterRegistrationBean<ApiKeyFilter> registration = new FilterRegistrationBean<>(new ApiKeyFilter());
         registration.addUrlPatterns(PROTECTED_URL_PATTERN);
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        registration.setEnabled(gatewayEnabled);
         return registration;
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(rateLimitInterceptor).addPathPatterns(PROTECTED_PATH);
+        if (gatewayEnabled) {
+            registry.addInterceptor(rateLimitInterceptor).addPathPatterns(PROTECTED_PATH);
+        }
     }
 }
