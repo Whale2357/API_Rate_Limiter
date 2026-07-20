@@ -30,13 +30,20 @@ if tokensToAdd > 0 then
 end
 
 local allowed = 0
+local retryAfterSeconds = 0
 if tokens >= 1.0 then
     tokens = tokens - 1.0
     allowed = 1
+else
+    local deficit = 1.0 - tokens
+    retryAfterSeconds = math.ceil(deficit / refillRate)
+    if retryAfterSeconds < 1 then
+        retryAfterSeconds = 1
+    end
 end
 
 redis.call('HSET', key, 'tokens', tostring(tokens), 'lastRefillTime', tostring(lastRefillTime))
 redis.call('EXPIRE', key, ttlSeconds)
 
--- {허용 여부(1/0), 잔여 토큰(floor)}
-return {allowed, math.floor(tokens)}
+-- {허용 여부(1/0), 잔여 토큰(floor), Retry-After(초)}
+return {allowed, math.floor(tokens), retryAfterSeconds}

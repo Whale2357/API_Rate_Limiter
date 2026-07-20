@@ -41,7 +41,7 @@ public class LuaRedisRateLimiter {
 
         boolean allowed = result != null && !result.isEmpty() && result.get(0) == 1L;
         long remaining = (result != null && result.size() > 1) ? result.get(1) : 0L;
-        int retryAfterSeconds = allowed ? 0 : 1;
+        int retryAfterSeconds = (result != null && result.size() > 2) ? result.get(2).intValue() : 0;
 
         return new RateLimitResult(allowed, tier.getCapacity(), remaining, retryAfterSeconds);
     }

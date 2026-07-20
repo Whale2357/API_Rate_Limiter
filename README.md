@@ -113,7 +113,7 @@ curl -X POST http://localhost:8080/v1/chat `
 ```
 
 - **허용 (200 OK)**: `{ "answer": "Mock AI Response" }` + `X-RateLimit-Remaining` 헤더
-- **한도 초과 (429)**: `{ "error": "Too Many Requests" }` + `Retry-After: 1`
+- **한도 초과 (429)**: `{ "error": "Too Many Requests" }` + `Retry-After` (다음 토큰 충전까지 남은 초, 동적 계산)
 - **인증 실패 (401)**: `{ "error": "Unauthorized" }`
 
 ### 멀티 인스턴스 (분산 정합성 확인)
@@ -236,11 +236,54 @@ docs/                # V1~V6 상세 보고서
 - `ApiKeyFilter` (Servlet Filter): 인증/Key 추출 → 실패 시 401
 - `RateLimitInterceptor` (HandlerInterceptor): `preHandle` 반환 boolean이 통과/차단 스위치 → 초과 시 429 Early Return
 - 표준 헤더(`X-RateLimit-Limit/Remaining`, `Retry-After`) 주입
+- Redis 버킷 키는 API Key **SHA-256 해시**로 생성해 원문이 저장소에 노출되지 않음
 
 ### 4. 성능 엔지니어링 (V6)
 - Baseline(게이트웨이 OFF)과 ON 시나리오를 분리 측정해 **오버헤드의 원인**을 분리한다.
 - Hot User 시나리오로 단일 Redis Key 직렬화 병목과 **429 Early Return** 응답성을 검증한다.
 - Actuator 메트릭 + Grafana 대시보드로 TPS, Latency, 200/429 비율, Redis CPU를 실시간 관측한다.
+
+---
+
+## 의도된 제약 (Design Constraints)
+
+이 프로젝트는 **Rate Limiter 학습·검증**에 집중하기 위해 아래 항목을 의도적으로 단순화했다. 프로덕션 서비스가 아닌 **학습/포트폴리오 범위**를 명확히 하기 위한 결정이다.
+
+| 제약 | 이유 | 프로덕션에서는 |
+|------|------|---------------|
+| **이중 API 경로** (`/api/request` vs `/v1/chat`) | V1~V4 학습용(`RateLimiterService`)과 V5 게이트웨이(`LuaRedisRateLimiter`)를 분리 | 단일 진입점으로 통합 |
+| **Tier = API Key 프리픽스** | 등급 정책 결정 로직 단순화 | DB/캐시 기반 Key 조회 및 만료 관리 |
+| **Bearer 형식만 검증** | 인증 범위를 Rate Limiting에 집중 | Key 유효성·폐기·권한 검증 |
+| **Lua 스크립트 2개** (`token-bucket.lua`, `rate-limiter.lua`) | V4(반환 `0/1`)와 V5(반환 `{allowed, remaining, retryAfter}`) 버전별 분리 | 단일 스크립트 + 파라미터 |
+| **`/v1/**`만 게이트웨이 보호** | 학습 API와 프로덕션 API 경로 분리 | 전역 또는 경로별 정책 적용 |
+| **Mock AI Service** | 비즈니스 로직이 프로젝트 목적이 아님 | 실제 LLM/외부 API 연동 |
+| **Token Bucket만 구현** | 알고리즘 비교는 별도 주제 | Fixed/Sliding Window 등 요구사항에 맞게 선택 |
+
+---
+
+## 알려진 한계와 대응 방안 (이론)
+
+아래 항목은 V6에서 **측정·인지**했으나, 본 프로젝트 범위에서는 구현하지 않았다.
+
+### Redis 장애 시 처리
+
+Redis가 다운되면 `LuaRedisRateLimiter`에서 예외가 발생하고 500 응답이 반환될 수 있다. 프로덕션에서는 서비스 특성에 따라 다음 중 하나를 선택한다.
+
+| 전략 | 동작 | 적합한 경우 |
+|------|------|------------|
+| **Fail-Open** | Redis 장애 시 요청 허용 | 가용성 우선 (일반 B2C API) |
+| **Fail-Closed** | Redis 장애 시 요청 차단 | 비용·보안 우선 (LLM API Gateway) |
+| **Circuit Breaker + Fallback** | 로컬 버킷으로 임시 전환 | 단기 장애 완화 |
+
+### Hot Key 병목
+
+V6 Hot User 시나리오(100 VU, 단일 API Key)에서 TPS 651, 429 49%가 측정되었다. 단일 Redis Key에 Lua 스크립트가 **직렬 실행**되면서 대기열이 형성되는 구조적 병목이다.
+
+| 대응 방안 | 설명 |
+|----------|------|
+| **Local Cache 2-Tier** | 인스턴스 로컬 버킷 + 주기적 Redis 동기화 |
+| **Key Sharding** | `hash(apiKey) % N`으로 버킷 분산 (정합성 트레이드오프) |
+| **Per-Instance Bucket + Global Sync** | 인스턴스별 허용 후 전역 합산 조정 |
 
 ---
 
