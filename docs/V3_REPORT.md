@@ -606,7 +606,9 @@ src/test/java/com/api_rate_limiter/
 ├── ConcurrencyRaceConditionTest.java     (+ v3-demo)
 ├── ConcurrencyBenchmarkTest.java         (+ NAIVE_ATOMIC, CAS)
 ├── HotUserBottleneckTest.java            (+ CAS)
-└── ReentrantLockFairnessBenchmarkTest.java
+├── ReentrantLockFairnessBenchmarkTest.java
+└── support/
+    └── ConcurrentRunner.java             (동시 실행 헬퍼, 타임아웃 포함)
 
 docs/
 └── V3_REPORT.md                          ← 본 문서

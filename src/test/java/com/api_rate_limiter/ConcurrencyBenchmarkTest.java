@@ -3,14 +3,10 @@ package com.api_rate_limiter;
 import com.api_rate_limiter.config.RateLimiterStrategy;
 import com.api_rate_limiter.domain.TokenBucket;
 import com.api_rate_limiter.factory.TokenBucketFactory;
+import com.api_rate_limiter.support.ConcurrentRunner;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -27,48 +23,22 @@ class ConcurrencyBenchmarkTest {
             throws InterruptedException {
         TokenBucket bucket = new TokenBucketFactory(strategy)
                 .create(TOTAL_REQUESTS, 0.0);
-        ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch doneLatch = new CountDownLatch(THREAD_COUNT);
-        AtomicInteger allowedCount = new AtomicInteger(0);
 
-        for (int i = 0; i < THREAD_COUNT; i++) {
-            executor.submit(() -> {
-                try {
-                    startLatch.await();
-                    for (int j = 0; j < REQUESTS_PER_THREAD; j++) {
-                        if (bucket.tryConsume()) {
-                            allowedCount.incrementAndGet();
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                } finally {
-                    doneLatch.countDown();
-                }
-            });
-        }
+        ConcurrentRunner.Result result = ConcurrentRunner.run(THREAD_COUNT, REQUESTS_PER_THREAD, bucket);
 
-        long startNanos = System.nanoTime();
-        startLatch.countDown();
-        doneLatch.await();
-        long elapsedNanos = System.nanoTime() - startNanos;
-        executor.shutdown();
-
-        double elapsedMs = elapsedNanos / 1_000_000.0;
         System.out.printf(
                 "[%s] total=%d, allowed=%d, elapsed=%.2f ms, throughput=%.0f req/s%n",
                 strategy,
                 TOTAL_REQUESTS,
-                allowedCount.get(),
-                elapsedMs,
-                TOTAL_REQUESTS / (elapsedMs / 1000.0));
+                result.allowedCount(),
+                result.elapsedMs(),
+                result.throughput(TOTAL_REQUESTS));
 
         if (strategy == RateLimiterStrategy.NO_LOCK || strategy == RateLimiterStrategy.NAIVE_ATOMIC) {
             System.out.printf("[%s] allowed=%d (data corruption expected under contention)%n",
-                    strategy, allowedCount.get());
+                    strategy, result.allowedCount());
         } else {
-            assertEquals(TOTAL_REQUESTS, allowedCount.get(),
+            assertEquals(TOTAL_REQUESTS, result.allowedCount(),
                     strategy + " should consume all tokens exactly once under concurrent access");
         }
     }

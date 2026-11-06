@@ -13,10 +13,6 @@ public class NaiveAtomicTokenBucket implements TokenBucket {
     private final int capacity;
     private final double refillRate;
 
-    public NaiveAtomicTokenBucket() {
-        this(AbstractTokenBucket.DEFAULT_CAPACITY, AbstractTokenBucket.DEFAULT_REFILL_RATE);
-    }
-
     public NaiveAtomicTokenBucket(int capacity, double refillRate) {
         this.capacity = capacity;
         this.refillRate = refillRate;
@@ -46,20 +42,5 @@ public class NaiveAtomicTokenBucket implements TokenBucket {
             return true;
         }
         return false;
-    }
-
-    @Override
-    public double getTokens() {
-        return tokens.get();
-    }
-
-    @Override
-    public int getCapacity() {
-        return capacity;
-    }
-
-    @Override
-    public double getRefillRate() {
-        return refillRate;
     }
 }
