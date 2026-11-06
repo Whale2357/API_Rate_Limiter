@@ -609,7 +609,5 @@ src/test/java/com/api_rate_limiter/
 └── ReentrantLockFairnessBenchmarkTest.java
 
 docs/
-├── V1_REPORT.md
-├── V2_REPORT.md
 └── V3_REPORT.md                          ← 본 문서
 ```
