@@ -3,10 +3,11 @@ package com.api_rate_limiter.interceptor;
 import com.api_rate_limiter.filter.ApiKeyFilter;
 import com.api_rate_limiter.ratelimiter.LuaRedisRateLimiter;
 import com.api_rate_limiter.ratelimiter.RateLimitResult;
+import com.api_rate_limiter.web.ErrorResponseWriter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -21,20 +22,19 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     private static final String HEADER_REMAINING = "X-RateLimit-Remaining";
 
     private final LuaRedisRateLimiter rateLimiter;
+    private final ErrorResponseWriter errorResponseWriter;
 
-    public RateLimitInterceptor(LuaRedisRateLimiter rateLimiter) {
+    public RateLimitInterceptor(LuaRedisRateLimiter rateLimiter, ErrorResponseWriter errorResponseWriter) {
         this.rateLimiter = rateLimiter;
+        this.errorResponseWriter = errorResponseWriter;
     }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         Object apiKeyAttribute = request.getAttribute(ApiKeyFilter.API_KEY_ATTRIBUTE);
         if (apiKeyAttribute == null) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            response.setCharacterEncoding("UTF-8");
-            response.getWriter().write("{\"error\":\"Unauthorized\"}");
-            return false;
+            throw new IllegalStateException(
+                    "API key attribute missing — ApiKeyFilter must be registered for the same paths as RateLimitInterceptor");
         }
 
         String apiKey = apiKeyAttribute.toString();
@@ -48,10 +48,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        response.setStatus(429);
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding("UTF-8");
-        response.getWriter().write("{\"error\":\"Too Many Requests\"}");
+        errorResponseWriter.write(response, HttpStatus.TOO_MANY_REQUESTS.value(), "Too Many Requests");
         return false;
     }
 }

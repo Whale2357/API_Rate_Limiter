@@ -1,11 +1,11 @@
 package com.api_rate_limiter.filter;
 
+import com.api_rate_limiter.web.ErrorResponseWriter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -19,6 +19,12 @@ public class ApiKeyFilter extends OncePerRequestFilter {
     public static final String API_KEY_ATTRIBUTE = "apiKey";
 
     private static final String BEARER_PREFIX = "Bearer ";
+
+    private final ErrorResponseWriter errorResponseWriter;
+
+    public ApiKeyFilter(ErrorResponseWriter errorResponseWriter) {
+        this.errorResponseWriter = errorResponseWriter;
+    }
 
     @Override
     protected void doFilterInternal(
@@ -44,9 +50,6 @@ public class ApiKeyFilter extends OncePerRequestFilter {
     }
 
     private void writeUnauthorized(HttpServletResponse response) throws IOException {
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding("UTF-8");
-        response.getWriter().write("{\"error\":\"Unauthorized\"}");
+        errorResponseWriter.write(response, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
     }
 }

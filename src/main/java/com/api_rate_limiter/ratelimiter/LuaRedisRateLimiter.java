@@ -8,8 +8,9 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * V5: V4에서 완성한 Redis Lua 토큰 버킷 엔진을 API Key 기반 게이트웨이용으로 노출한다.
- * 등급(Tier)별 정책을 적용하고, 표준 헤더 구성을 위한 잔여 토큰을 함께 반환한다.
+ * V5: API Key 기반 게이트웨이의 운영용 Rate Limiter.
+ * V4 LUA_REDIS 전략과 같은 rate-limiter.lua를 실행하며, 등급(Tier)별 정책을 적용하고
+ * 표준 헤더 구성을 위한 잔여 토큰을 함께 반환한다.
  */
 @Component
 public class LuaRedisRateLimiter {

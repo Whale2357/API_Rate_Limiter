@@ -3,16 +3,12 @@ package com.api_rate_limiter;
 import com.api_rate_limiter.config.RateLimiterStrategy;
 import com.api_rate_limiter.domain.TokenBucket;
 import com.api_rate_limiter.factory.TokenBucketFactory;
+import com.api_rate_limiter.support.ConcurrentRunner;
 import com.api_rate_limiter.support.RedisTestSupport;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -24,62 +20,11 @@ class DistributedConcurrencyTest extends RedisTestSupport {
     private static final String USER_ID = "distributed-user";
 
     private int runConcurrentConsume(TokenBucket bucket) throws InterruptedException {
-        ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch doneLatch = new CountDownLatch(THREAD_COUNT);
-        AtomicInteger allowedCount = new AtomicInteger(0);
-
-        for (int i = 0; i < THREAD_COUNT; i++) {
-            executor.submit(() -> {
-                try {
-                    startLatch.await();
-                    Thread.onSpinWait();
-                    if (bucket.tryConsume()) {
-                        allowedCount.incrementAndGet();
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                } finally {
-                    doneLatch.countDown();
-                }
-            });
-        }
-
-        startLatch.countDown();
-        doneLatch.await();
-        executor.shutdown();
-
-        return allowedCount.get();
+        return ConcurrentRunner.run(THREAD_COUNT, 1, bucket).allowedCount();
     }
 
     private int runMultiInstanceConsume(TokenBucket serverA, TokenBucket serverB) throws InterruptedException {
-        ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch doneLatch = new CountDownLatch(THREAD_COUNT);
-        AtomicInteger allowedCount = new AtomicInteger(0);
-
-        for (int i = 0; i < THREAD_COUNT; i++) {
-            TokenBucket bucket = (i % 2 == 0) ? serverA : serverB;
-            executor.submit(() -> {
-                try {
-                    startLatch.await();
-                    Thread.onSpinWait();
-                    if (bucket.tryConsume()) {
-                        allowedCount.incrementAndGet();
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                } finally {
-                    doneLatch.countDown();
-                }
-            });
-        }
-
-        startLatch.countDown();
-        doneLatch.await();
-        executor.shutdown();
-
-        return allowedCount.get();
+        return ConcurrentRunner.run(THREAD_COUNT, 1, i -> (i % 2 == 0) ? serverA : serverB).allowedCount();
     }
 
     @Test

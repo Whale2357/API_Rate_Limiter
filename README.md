@@ -212,10 +212,11 @@ src/main/java/com/api_rate_limiter/
 ├── filter/          # ApiKeyFilter (인증, 401)
 ├── interceptor/     # RateLimitInterceptor (트래픽 제어, 429)
 ├── ratelimiter/     # LuaRedisRateLimiter, RateLimitTier, RateLimitResult
-├── controller/      # ChatController (POST /v1/chat)
+├── controller/      # ChatController (POST /v1/chat), RequestController (experiment 프로필 전용)
+├── web/             # ErrorResponseWriter (401/429 JSON 에러 응답 공통화)
 └── service/         # AiService (Mock)
 src/main/resources/
-├── scripts/         # token-bucket.lua (V4), rate-limiter.lua (V5)
+├── scripts/         # rate-limiter.lua (V4 LUA_REDIS와 V5 게이트웨이가 공유)
 └── application-v6-baseline.properties  # V6 Baseline 프로필 (게이트웨이 OFF)
 monitoring/          # Prometheus, Grafana 프로비저닝 (V6)
 performance/k6/      # k6 시나리오 및 run-v6.ps1 (V6)
@@ -251,10 +252,9 @@ docs/                # V1~V6 상세 보고서
 
 | 제약 | 이유 | 프로덕션에서는 |
 |------|------|---------------|
-| **이중 API 경로** (`/api/request` vs `/v1/chat`) | V1~V4 학습용(`RateLimiterService`)과 V5 게이트웨이(`LuaRedisRateLimiter`)를 분리 | 단일 진입점으로 통합 |
+| **이중 API 경로** (`/api/request` vs `/v1/chat`) | V1~V4 학습용(`RateLimiterService`)과 V5 게이트웨이(`LuaRedisRateLimiter`)를 분리. `/api/request`는 `experiment` 프로필에서만 등록 | 단일 진입점으로 통합 |
 | **Tier = API Key 프리픽스** | 등급 정책 결정 로직 단순화 | DB/캐시 기반 Key 조회 및 만료 관리 |
 | **Bearer 형식만 검증** | 인증 범위를 Rate Limiting에 집중 | Key 유효성·폐기·권한 검증 |
-| **Lua 스크립트 2개** (`token-bucket.lua`, `rate-limiter.lua`) | V4(반환 `0/1`)와 V5(반환 `{allowed, remaining, retryAfter}`) 버전별 분리 | 단일 스크립트 + 파라미터 |
 | **`/v1/**`만 게이트웨이 보호** | 학습 API와 프로덕션 API 경로 분리 | 전역 또는 경로별 정책 적용 |
 | **Mock AI Service** | 비즈니스 로직이 프로젝트 목적이 아님 | 실제 LLM/외부 API 연동 |
 | **Token Bucket만 구현** | 알고리즘 비교는 별도 주제 | Fixed/Sliding Window 등 요구사항에 맞게 선택 |

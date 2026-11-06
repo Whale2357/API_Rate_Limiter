@@ -5,7 +5,7 @@ import com.api_rate_limiter.domain.AbstractTokenBucket;
 import com.api_rate_limiter.domain.LuaScriptRedisTokenBucket;
 import com.api_rate_limiter.domain.NaiveRedisTokenBucket;
 import com.api_rate_limiter.domain.TokenBucket;
-import com.api_rate_limiter.redis.TokenBucketLuaScript;
+import com.api_rate_limiter.ratelimiter.RateLimitLuaScript;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -16,30 +16,30 @@ public class TokenBucketFactory {
 
     private final RateLimiterStrategy strategy;
     private final StringRedisTemplate redisTemplate;
-    private final TokenBucketLuaScript tokenBucketLuaScript;
+    private final RateLimitLuaScript rateLimitLuaScript;
     private final long bucketTtlSeconds;
 
     @Autowired
     public TokenBucketFactory(
             @Value("${rate-limiter.strategy:NO_LOCK}") RateLimiterStrategy strategy,
             @Autowired(required = false) StringRedisTemplate redisTemplate,
-            @Autowired(required = false) TokenBucketLuaScript tokenBucketLuaScript,
+            @Autowired(required = false) RateLimitLuaScript rateLimitLuaScript,
             @Value("${rate-limiter.redis.bucket-ttl-seconds:3600}") long bucketTtlSeconds) {
         this.strategy = strategy;
         this.redisTemplate = redisTemplate;
-        this.tokenBucketLuaScript = tokenBucketLuaScript;
+        this.rateLimitLuaScript = rateLimitLuaScript;
         this.bucketTtlSeconds = bucketTtlSeconds;
     }
 
     private TokenBucketFactory(
             RateLimiterStrategy strategy,
             StringRedisTemplate redisTemplate,
-            TokenBucketLuaScript tokenBucketLuaScript,
+            RateLimitLuaScript rateLimitLuaScript,
             long bucketTtlSeconds,
             boolean testOnly) {
         this.strategy = strategy;
         this.redisTemplate = redisTemplate;
-        this.tokenBucketLuaScript = tokenBucketLuaScript;
+        this.rateLimitLuaScript = rateLimitLuaScript;
         this.bucketTtlSeconds = bucketTtlSeconds;
     }
 
@@ -48,12 +48,8 @@ public class TokenBucketFactory {
     }
 
     public static TokenBucketFactory forStrategy(RateLimiterStrategy strategy, StringRedisTemplate redisTemplate) {
-        TokenBucketLuaScript luaScript = redisTemplate != null ? new TokenBucketLuaScript() : null;
+        RateLimitLuaScript luaScript = redisTemplate != null ? new RateLimitLuaScript() : null;
         return new TokenBucketFactory(strategy, redisTemplate, luaScript, 3600L, true);
-    }
-
-    public TokenBucket create() {
-        return create("default");
     }
 
     public TokenBucket create(String userId) {
@@ -72,13 +68,9 @@ public class TokenBucketFactory {
         if (strategy == RateLimiterStrategy.LUA_REDIS) {
             requireRedis();
             return new LuaScriptRedisTokenBucket(
-                    userId, capacity, refillRate, redisTemplate, tokenBucketLuaScript, bucketTtlSeconds);
+                    userId, capacity, refillRate, redisTemplate, rateLimitLuaScript, bucketTtlSeconds);
         }
         return strategy.create(capacity, refillRate);
-    }
-
-    public RateLimiterStrategy getStrategy() {
-        return strategy;
     }
 
     private void requireRedis() {
