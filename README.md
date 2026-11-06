@@ -412,6 +412,47 @@ V2는 V1의 **Race Condition(데이터 정합성)** 을 해결했으나, 다음 
 | **메모리 증가** | 사용자 수만큼 버킷 생성 | ❌ V1과 동일 |
 | **성능 저하** | 락 도입으로 2~3배 처리 시간 증가 | ⚠️ 정확성과 교환 |
 
+### 9.1 추가 고려사항 — `synchronized(this)`의 락 노출
+
+`SynchronizedTokenBucket`은 버킷 객체 자신의 모니터(`this`)를 락으로 사용한다. 이 락은 클래스 내부에 갇혀 있지 않고, 버킷 참조를 가진 **모든 코드가 같은 락을 잡을 수 있다**. `TokenBucketManager.getOrCreate()`가 버킷을 외부로 반환하므로 서비스나 이후 추가될 코드도 참조를 갖게 된다.
+
+**발생 가능한 문제**
+
+```java
+TokenBucket bucket = tokenBucketManager.getOrCreate(userId);
+synchronized (bucket) {              // tryConsume()과 동일한 락
+    auditLogger.write(userId, ...);  // I/O 동안 해당 사용자의 모든 요청이 블로킹
+}
+```
+
+- **의도치 않은 지연**: 외부 코드가 버킷 모니터를 오래 잡으면 rate limiter 코드 변경 없이 해당 사용자의 `tryConsume()`이 모두 대기한다.
+- **교착 상태**: 스레드 A가 `bucket` 모니터를 잡은 채 락 `X`를 기다리고, 스레드 B가 `X`를 잡은 채 `tryConsume()`을 호출하면 서로 영원히 대기한다. 이 교착은 `SynchronizedTokenBucket` 코드만 봐서는 예측할 수 없다.
+
+**개선안 — private lock object**
+
+```java
+private final Object lock = new Object();
+
+public boolean tryConsume() {
+    synchronized (lock) {
+        return doConsume();
+    }
+}
+```
+
+`lock`은 클래스 외부에서 참조할 수 없으므로 락 규칙이 클래스 안에서 완결된다 (Effective Java 3판 아이템 82). `ReentrantLockTokenBucket`은 이미 `private final ReentrantLock`을 사용하므로 이 문제가 없다.
+
+**판단**
+
+| 항목 | 내용 |
+|------|------|
+| 성능 | 동일한 모니터 락이므로 처리량 차이 없음 |
+| 메모리 | 버킷당 빈 객체 1개(약 16바이트) 추가 |
+| 현재 위험도 | 낮음 — 현재 코드에는 버킷을 외부에서 `synchronized`로 잡는 곳이 없음 |
+| 적용 여부 | V2에서는 실험 비교 기준 유지를 위해 `synchronized(this)`를 그대로 두고, 방어적 설계 관점의 개선 과제로 기록 |
+
+> Java 21 이상에서 가상 스레드를 사용할 경우 `synchronized`는 캐리어 스레드를 고정(pinning)하는 문제가 있다 (JDK 24, JEP 491에서 개선). 현재 Java 17 기준이라 해당하지 않지만, 업그레이드 시 `ReentrantLock`이 유리해지는 비교 포인트다.
+
 ---
 
 ## 10. 테스트 체계
