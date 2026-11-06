@@ -41,16 +41,4 @@ public class TokenBucket {
         }
         return false;
     }
-
-    public double getTokens() {
-        return tokens;
-    }
-
-    public int getCapacity() {
-        return capacity;
-    }
-
-    public double getRefillRate() {
-        return refillRate;
-    }
 }
