@@ -2,6 +2,7 @@ package com.api_rate_limiter.config;
 
 import com.api_rate_limiter.filter.ApiKeyFilter;
 import com.api_rate_limiter.interceptor.RateLimitInterceptor;
+import com.api_rate_limiter.web.ErrorResponseWriter;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,8 +26,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
     }
 
     @Bean
-    public FilterRegistrationBean<ApiKeyFilter> apiKeyFilter() {
-        FilterRegistrationBean<ApiKeyFilter> registration = new FilterRegistrationBean<>(new ApiKeyFilter());
+    public FilterRegistrationBean<ApiKeyFilter> apiKeyFilter(ErrorResponseWriter errorResponseWriter) {
+        FilterRegistrationBean<ApiKeyFilter> registration =
+                new FilterRegistrationBean<>(new ApiKeyFilter(errorResponseWriter));
         registration.addUrlPatterns(PROTECTED_URL_PATTERN);
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return registration;

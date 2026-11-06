@@ -72,19 +72,27 @@ src/main/java/com/api_rate_limiter/
 ├── interceptor/
 │   └── RateLimitInterceptor.java  # preHandle tryAcquire 전처리 (429 + 헤더)
 ├── ratelimiter/
-│   ├── LuaRedisRateLimiter.java   # V4 Lua 엔진 게이트웨이 래퍼
+│   ├── LuaRedisRateLimiter.java   # 운영용 Rate Limiter (API Key + 등급 정책)
 │   ├── RateLimitLuaScript.java    # rate-limiter.lua 로더 ({allowed, remaining})
 │   ├── RateLimitTier.java         # 등급별 정책 (FREE/PRO/ENTERPRISE)
 │   └── RateLimitResult.java       # tryAcquire 결과 (allowed/limit/remaining/retryAfter)
+├── web/
+│   └── ErrorResponseWriter.java   # Filter/Interceptor 공통 JSON 오류 응답 (401/429)
 ├── controller/
 │   └── ChatController.java        # POST /v1/chat Mock 엔드포인트
 ├── service/
 │   └── AiService.java             # 가짜 AI 응답 생성
 └── dto/
-    ├── ChatRequest.java
-    └── ChatResponse.java
-src/main/resources/scripts/rate-limiter.lua
+    ├── ChatRequest.java           # record
+    └── ChatResponse.java          # record
+src/main/resources/scripts/rate-limiter.lua   # V5 게이트웨이와 V4 LUA_REDIS 전략이 공유하는 유일한 Lua 스크립트
 ```
+
+### 운영 경로와 실험 경로의 분리
+
+- **운영 경로**: `/v1/**` → `ApiKeyFilter` → `RateLimitInterceptor` → `LuaRedisRateLimiter`. 기본 프로필에서 동작하는 유일한 Rate Limiter다.
+- **실험 경로**: V1~V4 동시성 전략 비교용 `/api/request`(`RequestController`)는 `experiment` 프로필에서만 등록된다 (`--spring.profiles.active=experiment`).
+- **Lua 스크립트 단일화**: V4의 `token-bucket.lua`를 제거하고, V4 `LUA_REDIS` 전략(`LuaScriptRedisTokenBucket`)도 `rate-limiter.lua`를 실행해 반환값 중 허용 여부만 사용한다. 충전 공식은 한 곳에서만 관리된다.
 
 ### 레이어별 책임
 
@@ -291,6 +299,7 @@ src/main/java/com/api_rate_limiter/
 │   ├── RateLimitLuaScript.java
 │   ├── RateLimitTier.java
 │   └── RateLimitResult.java
+├── web/ErrorResponseWriter.java
 ├── controller/ChatController.java
 ├── service/AiService.java
 └── dto/

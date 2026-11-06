@@ -23,7 +23,7 @@ public class ChatController {
 
     @PostMapping("/chat")
     public ChatResponse chat(@RequestBody(required = false) ChatRequest request) {
-        String message = request != null ? request.getMessage() : null;
+        String message = request != null ? request.message() : null;
         return aiService.generateAnswer(message);
     }
 }
