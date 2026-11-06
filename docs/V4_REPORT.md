@@ -416,6 +416,7 @@ src/test/java/com/api_rate_limiter/
 ├── DistributedConcurrencyTest.java
 ├── DistributedConcurrencyBenchmarkTest.java
 └── support/
+    ├── ConcurrentRunner.java      (동시 실행 헬퍼, 타임아웃 포함)
     ├── RedisTestSupport.java
     └── RedisTestResource.java
 docs/V4_REPORT.md

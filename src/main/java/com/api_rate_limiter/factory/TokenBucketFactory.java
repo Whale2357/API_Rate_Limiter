@@ -52,10 +52,6 @@ public class TokenBucketFactory {
         return new TokenBucketFactory(strategy, redisTemplate, luaScript, 3600L, true);
     }
 
-    public TokenBucket create() {
-        return create("default");
-    }
-
     public TokenBucket create(String userId) {
         return create(userId, AbstractTokenBucket.DEFAULT_CAPACITY, AbstractTokenBucket.DEFAULT_REFILL_RATE);
     }
@@ -75,10 +71,6 @@ public class TokenBucketFactory {
                     userId, capacity, refillRate, redisTemplate, tokenBucketLuaScript, bucketTtlSeconds);
         }
         return strategy.create(capacity, refillRate);
-    }
-
-    public RateLimiterStrategy getStrategy() {
-        return strategy;
     }
 
     private void requireRedis() {

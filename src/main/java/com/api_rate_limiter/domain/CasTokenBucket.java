@@ -14,10 +14,6 @@ public class CasTokenBucket implements TokenBucket {
     private final int capacity;
     private final double refillRate;
 
-    public CasTokenBucket() {
-        this(AbstractTokenBucket.DEFAULT_CAPACITY, AbstractTokenBucket.DEFAULT_REFILL_RATE);
-    }
-
     public CasTokenBucket(int capacity, double refillRate) {
         this.capacity = capacity;
         this.refillRate = refillRate;
@@ -53,20 +49,5 @@ public class CasTokenBucket implements TokenBucket {
                 return true;
             }
         }
-    }
-
-    @Override
-    public double getTokens() {
-        return state.get().tokens();
-    }
-
-    @Override
-    public int getCapacity() {
-        return capacity;
-    }
-
-    @Override
-    public double getRefillRate() {
-        return refillRate;
     }
 }
