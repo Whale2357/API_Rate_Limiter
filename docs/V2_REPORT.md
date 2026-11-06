@@ -92,8 +92,8 @@ POST /api/request?userId={userId}
 
 | 클래스 | 패키지 | 역할 |
 |--------|--------|------|
-| `TokenBucket` | domain | 인터페이스 (`tryConsume`, getter) |
-| `AbstractTokenBucket` | domain | 공통 필드, `refill()` 로직 |
+| `TokenBucket` | domain | 인터페이스 (`tryConsume`) |
+| `AbstractTokenBucket` | domain | 공통 상태(`private`), `refill()` + `doConsume()` 템플릿 |
 | `V1TokenBucket` | domain | 동기화 없음 (V1 로직 이관) |
 | `SynchronizedTokenBucket` | domain | `synchronized(this)` 임계 영역 |
 | `ReentrantLockTokenBucket` | domain | `ReentrantLock` 명시적 락 |
@@ -115,16 +115,26 @@ rate-limiter.strategy=NO_LOCK
 
 ## 4. 구현체 상세
 
-### 4.1 V1TokenBucket (NO_LOCK) — V2-1 실험군
+### 4.0 공통 로직 — AbstractTokenBucket.doConsume() (템플릿 메서드)
+
+충전 → 확인 → 차감 로직은 `AbstractTokenBucket`에 한 번만 구현하고, 각 전략은 이 메서드를 **어떤 동기화로 감쌀지만** 결정한다. 상태 필드(`tokens`, `lastRefillTime`)는 `private`이라 하위 클래스가 직접 수정할 수 없다.
 
 ```java
-public boolean tryConsume() {
+protected final boolean doConsume() {
     refill();
     if (tokens >= 1) {
         tokens -= 1;
         return true;
     }
     return false;
+}
+```
+
+### 4.1 V1TokenBucket (NO_LOCK) — V2-1 실험군
+
+```java
+public boolean tryConsume() {
+    return doConsume();
 }
 ```
 
@@ -136,12 +146,7 @@ public boolean tryConsume() {
 ```java
 public boolean tryConsume() {
     synchronized (this) {
-        refill();
-        if (tokens >= 1) {
-            tokens -= 1;
-            return true;
-        }
-        return false;
+        return doConsume();
     }
 }
 ```
@@ -156,12 +161,7 @@ public boolean tryConsume() {
 public boolean tryConsume() {
     lock.lock();
     try {
-        refill();
-        if (tokens >= 1) {
-            tokens -= 1;
-            return true;
-        }
-        return false;
+        return doConsume();
     } finally {
         lock.unlock();
     }
@@ -581,5 +581,7 @@ src/test/java/com/api_rate_limiter/
 ├── ConcurrencyRaceConditionTest.java
 ├── ConcurrencyBenchmarkTest.java
 ├── HotUserBottleneckTest.java
-└── ReentrantLockFairnessBenchmarkTest.java
+├── ReentrantLockFairnessBenchmarkTest.java
+└── support/
+    └── ConcurrentRunner.java         (동시 실행 헬퍼, 타임아웃 포함)
 ```

@@ -22,8 +22,4 @@ public class TokenBucketFactory {
     public TokenBucket create(int capacity, double refillRate) {
         return strategy.create(capacity, refillRate);
     }
-
-    public RateLimiterStrategy getStrategy() {
-        return strategy;
-    }
 }
