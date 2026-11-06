@@ -1,6 +1,5 @@
 package com.api_rate_limiter.config;
 
-import com.api_rate_limiter.domain.AbstractTokenBucket;
 import com.api_rate_limiter.domain.CasTokenBucket;
 import com.api_rate_limiter.domain.NaiveAtomicTokenBucket;
 import com.api_rate_limiter.domain.ReentrantLockTokenBucket;
@@ -54,14 +53,6 @@ public enum RateLimiterStrategy {
                     "LUA_REDIS requires userId — use TokenBucketFactory.create(userId, capacity, refillRate)");
         }
     };
-
-    public boolean isRedisBased() {
-        return this == NAIVE_REDIS || this == LUA_REDIS;
-    }
-
-    public TokenBucket create() {
-        return create(AbstractTokenBucket.DEFAULT_CAPACITY, AbstractTokenBucket.DEFAULT_REFILL_RATE);
-    }
 
     public abstract TokenBucket create(int capacity, double refillRate);
 }

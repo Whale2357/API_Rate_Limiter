@@ -7,10 +7,6 @@ public class ChatRequest {
     public ChatRequest() {
     }
 
-    public ChatRequest(String message) {
-        this.message = message;
-    }
-
     public String getMessage() {
         return message;
     }

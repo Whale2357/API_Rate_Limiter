@@ -16,7 +16,6 @@ public class NaiveRedisTokenBucket implements TokenBucket {
     private static final String FIELD_TOKENS = "tokens";
     private static final String FIELD_LAST_REFILL_TIME = "lastRefillTime";
 
-    private final String userId;
     private final String redisKey;
     private final int capacity;
     private final double refillRate;
@@ -29,7 +28,6 @@ public class NaiveRedisTokenBucket implements TokenBucket {
             double refillRate,
             StringRedisTemplate redisTemplate,
             long bucketTtlSeconds) {
-        this.userId = userId;
         this.redisKey = RedisTokenBucketKeys.userBucket(userId);
         this.capacity = capacity;
         this.refillRate = refillRate;
@@ -77,25 +75,5 @@ public class NaiveRedisTokenBucket implements TokenBucket {
         state.put(FIELD_LAST_REFILL_TIME, Long.toString(lastRefillTime));
         redisTemplate.opsForHash().putAll(redisKey, state);
         redisTemplate.expire(redisKey, java.time.Duration.ofSeconds(bucketTtlSeconds));
-    }
-
-    @Override
-    public double getTokens() {
-        String value = (String) redisTemplate.opsForHash().get(redisKey, FIELD_TOKENS);
-        return value == null ? capacity : Double.parseDouble(value);
-    }
-
-    @Override
-    public int getCapacity() {
-        return capacity;
-    }
-
-    @Override
-    public double getRefillRate() {
-        return refillRate;
-    }
-
-    public String getUserId() {
-        return userId;
     }
 }

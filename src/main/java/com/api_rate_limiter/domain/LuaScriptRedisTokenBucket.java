@@ -13,9 +13,6 @@ import java.util.List;
  */
 public class LuaScriptRedisTokenBucket implements TokenBucket {
 
-    private static final String FIELD_TOKENS = "tokens";
-
-    private final String userId;
     private final String redisKey;
     private final int capacity;
     private final double refillRate;
@@ -30,7 +27,6 @@ public class LuaScriptRedisTokenBucket implements TokenBucket {
             StringRedisTemplate redisTemplate,
             TokenBucketLuaScript tokenBucketLuaScript,
             long bucketTtlSeconds) {
-        this.userId = userId;
         this.redisKey = RedisTokenBucketKeys.userBucket(userId);
         this.capacity = capacity;
         this.refillRate = refillRate;
@@ -48,25 +44,5 @@ public class LuaScriptRedisTokenBucket implements TokenBucket {
                 Double.toString(refillRate),
                 Long.toString(bucketTtlSeconds));
         return result != null && result == 1L;
-    }
-
-    @Override
-    public double getTokens() {
-        String value = (String) redisTemplate.opsForHash().get(redisKey, FIELD_TOKENS);
-        return value == null ? capacity : Double.parseDouble(value);
-    }
-
-    @Override
-    public int getCapacity() {
-        return capacity;
-    }
-
-    @Override
-    public double getRefillRate() {
-        return refillRate;
-    }
-
-    public String getUserId() {
-        return userId;
     }
 }
